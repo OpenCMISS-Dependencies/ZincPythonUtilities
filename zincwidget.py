@@ -1,3 +1,6 @@
+# This python module is intended to facilitate users creating their own applications that use OpenCMISS-Zinc
+# See the examples at https://svn.physiomeproject.org/svn/cmiss/zinc/bindings/trunk/python/ for further
+# information.
 
 try:
     from PySide import QtCore, QtOpenGL
