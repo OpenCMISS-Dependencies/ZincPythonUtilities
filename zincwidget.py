@@ -8,8 +8,12 @@ except ImportError:
     from PyQt4 import QtCore, QtOpenGL
 
 # from opencmiss.zinc.glyph import Glyph
-from opencmiss.zinc.sceneviewer import Sceneviewerinput, Sceneviewer, Sceneviewerevent
+from opencmiss.zinc.sceneviewer import Sceneviewer, Sceneviewerevent
+from opencmiss.zinc.sceneviewerinput import Sceneviewerinput
 from opencmiss.zinc.element import Element, Elementbasis
+from opencmiss.zinc.scenecoordinatesystem import SCENECOORDINATESYSTEM_LOCAL, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT
+from opencmiss.zinc.field import Field
+from opencmiss.zinc.glyph import Glyph
 
 # mapping from qt to zinc start
 # Create a button map of Qt mouse buttons to Zinc input buttons
@@ -27,6 +31,13 @@ def modifier_map(qt_modifiers):
     return modifiers
 # mapping from qt to zinc end
 
+# selectionMode start
+class SelectionMode(object):
+    
+    NONE = -1
+    EXCULSIVE = 0
+    ADDITIVE = 1
+# selectionMode end
 
 class ZincWidget(QtOpenGL.QGLWidget):
 
@@ -39,14 +50,38 @@ class ZincWidget(QtOpenGL.QGLWidget):
         # Create a Zinc context from which all other objects can be derived either directly or indirectly.
         self._context = None
         self._scene_viewer = None
+        self._nodeSelectMode = True
+        self._elemSelectMode = True
+        self._selectionMode = SelectionMode.NONE
+        self._selectionGroup = None
+        self._selectionBox = None
         # init end
 
     def setContext(self, context):
+        '''
+        Sets the context for this ZincWidget.  This should be set before the initializeGL()
+        method is called otherwise the scene viewer cannot be created.
+        '''
         self._context = context
 
     def getSceneviewer(self):
+        '''
+        Get the scene viewer for this ZincWidget.
+        '''
         return self._scene_viewer
 
+    def setSelectModeNode(self):
+        self._nodeSelectMode = True
+        self._elemSelectMode = False
+        
+    def setSelectModeElement(self):
+        self._elemSelectMode = True
+        self._nodeSelectMode = False
+        
+    def setSelectModeAll(self):
+        self._nodeSelectMode = True
+        self._elemSelectMode = True
+        
     # initializeGL start
     def initializeGL(self):
         '''
@@ -68,22 +103,45 @@ class ZincWidget(QtOpenGL.QGLWidget):
         self._scene_viewer.setScenefilter(graphics_filter)
         region = self._context.getDefaultRegion()
         scene = region.getScene()
+        fieldmodule = region.getFieldmodule()
+        self._selectionGroup = fieldmodule.createFieldGroup()
+        scene.setSelectionField(self._selectionGroup)
+        self._scene_picker = scene.createScenepicker()
         self._scene_viewer.setScene(scene)
-
+        
+        self.defineStandardGlyphs()
+        self._selectionBox = scene.createGraphicsPoints()
+        self._selectionBox.setScenecoordinatesystem(SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT)
+        attributes = self._selectionBox.getGraphicspointattributes()
+        attributes.setGlyphShapeType(Glyph.SHAPE_TYPE_CUBE_WIREFRAME)
+        attributes.setBaseSize([10, 10, 0.9999])
+        attributes.setGlyphOffset([1, -1, 0])
+        self._selectionBox_setBaseSize = attributes.setBaseSize
+        self._selectionBox_setGlyphOffset = attributes.setGlyphOffset
+        
+        self._selectionBox.setVisibilityFlag(False)
+        
         self._scene_viewer.viewAll()
 
-        self._selection_nofifier = scene.createSelectionnotifier()
-        self._selection_nofifier.setCallback(self._zincSelectionEvent)
+#  Not really applicable to us yet.
+#         self._selection_notifier = scene.createSelectionnotifier()
+#         self._selection_notifier.setCallback(self._zincSelectionEvent)
         
         self._scene_viewer_notifier = self._scene_viewer.createSceneviewernotifier()
         self._scene_viewer_notifier.setCallback(self._zincSceneviewerEvent)
         # initializeGL end
 
     def defineStandardGlyphs(self):
+        '''
+        Helper method to define the standard glyphs.
+        '''
         glyph_module = self._context.getGlyphmodule()
         glyph_module.defineStandardGlyphs()
 
     def defineStandardMaterials(self):
+        '''
+        Helper method to define the standard materials.
+        '''
         material_module = self._context.getMaterialmodule()
         material_module.defineStandardMaterials()
 
@@ -132,6 +190,10 @@ class ZincWidget(QtOpenGL.QGLWidget):
         mesh.defineElement(-1, element_template)
 
     def viewAll(self):
+        '''
+        Helper method to set the current scene viewer to view everything
+        visible in the current scene.
+        '''
         self._scene_viewer.viewAll()
 
     # paintGL start
@@ -146,11 +208,17 @@ class ZincWidget(QtOpenGL.QGLWidget):
         # paintGL end
 
     def _zincSceneviewerEvent(self, event):
+        '''
+        Process a scene viewer event.  The updateGL() method is called for a
+        repaint required event all other events are ignored.
+        '''
         if event.getChangeFlags() & Sceneviewerevent.CHANGE_FLAG_REPAINT_REQUIRED:
             self.updateGL()
 
-    def _zincSelectionEvent(self, event):
-        print(event.getChangeFlags())
+#  Not applicable at the current point in time.
+#     def _zincSelectionEvent(self, event):
+#         print(event.getChangeFlags())
+#         print('go the selection change')
 
     # resizeGL start
     def resizeGL(self, width, height):
@@ -164,36 +232,129 @@ class ZincWidget(QtOpenGL.QGLWidget):
         '''
         Inform the scene viewer of a mouse press event.
         '''
-        scene_input = self._scene_viewer.createSceneviewerinput()
-        scene_input.setPosition(mouseevent.x(), mouseevent.y())
-        scene_input.setEventType(Sceneviewerinput.EVENT_TYPE_BUTTON_PRESS)
-        scene_input.setButtonType(button_map[mouseevent.button()])
-        scene_input.setModifierFlags(modifier_map(mouseevent.modifiers()))
-
-        self._scene_viewer.processSceneviewerinput(scene_input)
+        if (mouseevent.modifiers() & QtCore.Qt.CTRL) and (self._nodeSelectMode or self._elemSelectMode):
+            self._selectionPositionStart = (mouseevent.x(), mouseevent.y())
+            self._selectionMode = SelectionMode.EXCULSIVE
+            if mouseevent.modifiers() & QtCore.Qt.SHIFT:
+                self._selectionMode = SelectionMode.ADDITIVE
+        else:
+            
+            scene_input = self._scene_viewer.createSceneviewerinput()
+            scene_input.setPosition(mouseevent.x(), mouseevent.y())
+            scene_input.setEventType(Sceneviewerinput.EVENT_TYPE_BUTTON_PRESS)
+            scene_input.setButtonType(button_map[mouseevent.button()])
+            scene_input.setModifierFlags(modifier_map(mouseevent.modifiers()))
+    
+            self._scene_viewer.processSceneviewerinput(scene_input)
 
     def mouseReleaseEvent(self, mouseevent):
         '''
         Inform the scene viewer of a mouse release event.
         '''
-        scene_input = self._scene_viewer.createSceneviewerinput()
-        scene_input.setPosition(mouseevent.x(), mouseevent.y())
-        scene_input.setEventType(Sceneviewerinput.EVENT_TYPE_BUTTON_RELEASE)
-        scene_input.setButtonType(button_map[mouseevent.button()])
+        if self._selectionMode != SelectionMode.NONE:
+            x = mouseevent.x()
+            y = mouseevent.y()
+            # Construct a small frustrum to look for nodes in.
+            root_region = self._context.getDefaultRegion()
+            root_region.beginHierarchicalChange()
+            
+            if (x != self._selectionPositionStart[0] and y != self._selectionPositionStart[1]):
+                self._selectionBox.setVisibilityFlag(False)
+                left = min(x, self._selectionPositionStart[0])
+                right = max(x, self._selectionPositionStart[0])
+                bottom = min(y, self._selectionPositionStart[1])
+                top = max(y, self._selectionPositionStart[1])
+                self._scene_picker.setSceneviewerRectangle(self._scene_viewer, SCENECOORDINATESYSTEM_LOCAL, left, bottom, right, top);
+                if self._selectionMode == SelectionMode.EXCULSIVE:
+                    self._selectionGroup.clear()
+                if self._nodeSelectMode:
+                    self._scene_picker.addPickedNodesToFieldGroup(self._selectionGroup)
+                if self._elemSelectMode:
+                    self._scene_picker.addPickedElementsToFieldGroup(self._selectionGroup)
+            else:
+                    
+                self._scene_picker.setSceneviewerRectangle(self._scene_viewer, SCENECOORDINATESYSTEM_LOCAL, x-0.5, y-0.5, x+0.5, y+0.5);
+                if self._nodeSelectMode and self._elemSelectMode and self._selectionMode == SelectionMode.EXCULSIVE and not self._scene_picker.getNearestGraphics().isValid():
+                    self._selectionGroup.clear()
+                    
+                if self._nodeSelectMode and (self._scene_picker.getNearestGraphics().getFieldDomainType() == Field.DOMAIN_TYPE_NODES):
+                    node = self._scene_picker.getNearestNode()
+                    nodeset = node.getNodeset()
 
-        self._scene_viewer.processSceneviewerinput(scene_input)
+                    nodegroup = self._selectionGroup.getFieldNodeGroup(nodeset)
+                    if not nodegroup.isValid():
+                        nodegroup = self._selectionGroup.createFieldNodeGroup(nodeset)
+                        
+                    group = nodegroup.getNodesetGroup()
+                    if self._selectionMode == SelectionMode.EXCULSIVE:
+                        remove_current = group.getSize() == 1 and group.containsNode(node)
+                        self._selectionGroup.clear()
+                        if not remove_current:
+                            group.addNode(node)
+                    elif self._selectionMode == SelectionMode.ADDITIVE:
+                        if group.containsNode(node):
+                            group.removeNode(node)
+                        else:
+                            group.addNode(node)
+    
+                if self._elemSelectMode and (self._scene_picker.getNearestGraphics().getFieldDomainType() in [Field.DOMAIN_TYPE_MESH1D, Field.DOMAIN_TYPE_MESH2D, Field.DOMAIN_TYPE_MESH3D]):
+                    elem = self._scene_picker.getNearestElement()
+                    mesh = elem.getMesh()
+
+                    elementgroup = self._selectionGroup.getFieldElementGroup(mesh)
+                    if not elementgroup.isValid():
+                        elementgroup = self._selectionGroup.createFieldElementGroup(mesh)
+                        
+                    group = elementgroup.getMeshGroup()
+                    if self._selectionMode == SelectionMode.EXCULSIVE:
+                        remove_current = group.getSize() == 1 and group.containsElement(elem)
+                        self._selectionGroup.clear()
+                        if not remove_current:
+                            group.addElement(elem)
+                    elif self._selectionMode == SelectionMode.ADDITIVE:
+                        if group.containsElement(elem):
+                            group.removeElement(elem)
+                        else:
+                            group.addElement(elem)
+                
+                
+            root_region.endHierarchicalChange()
+            self._selectionMode = SelectionMode.NONE
+        else:
+            scene_input = self._scene_viewer.createSceneviewerinput()
+            scene_input.setPosition(mouseevent.x(), mouseevent.y())
+            scene_input.setEventType(Sceneviewerinput.EVENT_TYPE_BUTTON_RELEASE)
+            scene_input.setButtonType(button_map[mouseevent.button()])
+    
+            self._scene_viewer.processSceneviewerinput(scene_input)
 
     def mouseMoveEvent(self, mouseevent):
         '''
         Inform the scene viewer of a mouse move event and update the OpenGL scene to reflect this
         change to the viewport.
         '''
-        scene_input = self._scene_viewer.createSceneviewerinput()
-        scene_input.setPosition(mouseevent.x(), mouseevent.y())
-        scene_input.setEventType(Sceneviewerinput.EVENT_TYPE_MOTION_NOTIFY)
-        if mouseevent.type() == QtCore.QEvent.Leave:
-            scene_input.setPosition(-1, -1)
-
-        self._scene_viewer.processSceneviewerinput(scene_input)
+        
+        if self._selectionMode != SelectionMode.NONE:
+            x = mouseevent.x()
+            y = mouseevent.y()
+            xdiff = float(x - self._selectionPositionStart[0])
+            ydiff = float(y - self._selectionPositionStart[1])
+            if abs(xdiff) < 0.0001:
+                xdiff = 1
+            if abs(ydiff) < 0.0001:
+                ydiff = 1
+            xoff = float(self._selectionPositionStart[0])/xdiff + 0.5
+            yoff = float(self._selectionPositionStart[1])/ydiff + 0.5
+            self._selectionBox_setBaseSize([xdiff, ydiff, 0.999])
+            self._selectionBox_setGlyphOffset([xoff, -yoff, 0])
+            self._selectionBox.setVisibilityFlag(True)
+        else:
+            scene_input = self._scene_viewer.createSceneviewerinput()
+            scene_input.setPosition(mouseevent.x(), mouseevent.y())
+            scene_input.setEventType(Sceneviewerinput.EVENT_TYPE_MOTION_NOTIFY)
+            if mouseevent.type() == QtCore.QEvent.Leave:
+                scene_input.setPosition(-1, -1)
+    
+            self._scene_viewer.processSceneviewerinput(scene_input)
 
 
