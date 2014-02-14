@@ -11,9 +11,10 @@ except ImportError:
 from opencmiss.zinc.sceneviewer import Sceneviewer, Sceneviewerevent
 from opencmiss.zinc.sceneviewerinput import Sceneviewerinput
 from opencmiss.zinc.element import Element, Elementbasis
-from opencmiss.zinc.scenecoordinatesystem import SCENECOORDINATESYSTEM_LOCAL, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT
+from opencmiss.zinc.scenecoordinatesystem import SCENECOORDINATESYSTEM_LOCAL, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT, SCENECOORDINATESYSTEM_WORLD
 from opencmiss.zinc.field import Field
 from opencmiss.zinc.glyph import Glyph
+from opencmiss.zinc.status import OK
 
 # mapping from qt to zinc start
 # Create a button map of Qt mouse buttons to Zinc input buttons
@@ -44,17 +45,21 @@ class ZincWidget(QtOpenGL.QGLWidget):
     # init start
     def __init__(self, parent=None):
         '''
-        Call the super class init functions, create a Zinc context and set the scene viewer handle to None.
+        Call the super class init functions, set the  Zinc context and the scene viewer handle to None.
+        Initialise other attributes that deal with selection and the rotation of the plane.
         '''
         QtOpenGL.QGLWidget.__init__(self, parent)
         # Create a Zinc context from which all other objects can be derived either directly or indirectly.
         self._context = None
         self._scene_viewer = None
+
+        # Selection attributes
         self._nodeSelectMode = True
         self._elemSelectMode = True
         self._selectionMode = SelectionMode.NONE
         self._selectionGroup = None
         self._selectionBox = None
+
         # init end
 
     def setContext(self, context):
@@ -93,7 +98,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
         # From the scene viewer module we can create a scene viewer, we set up the
         # scene viewer to have the same OpenGL properties as the QGLWidget.
         self._scene_viewer = scene_viewer_module.createSceneviewer(Sceneviewer.BUFFERING_MODE_DOUBLE, Sceneviewer.STEREO_MODE_DEFAULT)
-
+#         self._scene_viewer.setProjectionMode(Sceneviewer.PROJECTION_MODE_PARALLEL)
         # Create a filter for visibility flags which will allow us to see our graphic.
         filter_module = self._context.getScenefiltermodule()
         # By default graphics are created with their visibility flags set to on (or true).
@@ -121,6 +126,16 @@ class ZincWidget(QtOpenGL.QGLWidget):
 
         self._selectionBox.setVisibilityFlag(False)
 
+        # Set up unproject pipeline
+        self._window_coords_from = fieldmodule.createFieldConstant([0, 0, 0])
+        self._global_coords_from = fieldmodule.createFieldConstant([0, 0, 0])
+        unproject = fieldmodule.createFieldSceneviewerProjection(self._scene_viewer, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT, SCENECOORDINATESYSTEM_WORLD)
+        project = fieldmodule.createFieldSceneviewerProjection(self._scene_viewer, SCENECOORDINATESYSTEM_WORLD, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT)
+
+#         unproject_t = fieldmodule.createFieldTranspose(4, unproject)
+        self._global_coords_to = fieldmodule.createFieldProjection(self._window_coords_from, unproject)
+        self._window_coords_to = fieldmodule.createFieldProjection(self._global_coords_from, project)
+
         self._scene_viewer.viewAll()
 
 #  Not really applicable to us yet.
@@ -130,6 +145,35 @@ class ZincWidget(QtOpenGL.QGLWidget):
         self._scene_viewer_notifier = self._scene_viewer.createSceneviewernotifier()
         self._scene_viewer_notifier.setCallback(self._zincSceneviewerEvent)
         # initializeGL end
+
+    def getLookAtParameters(self):
+        result, lookat, eye, up = self._scene_viewer.getLookatParameters()
+        if result == OK:
+            return (lookat, eye, up)
+
+        return None
+
+    def project(self, x, y, z):
+        in_coords = [x, y, z]
+        fieldmodule = self._global_coords_from.getFieldmodule()
+        fieldcache = fieldmodule.createFieldcache()
+        self._global_coords_from.assignReal(fieldcache, in_coords)
+        result, out_coords = self._window_coords_to.evaluateReal(fieldcache, 3)
+        if result == OK:
+            return out_coords  # [out_coords[0] / out_coords[3], out_coords[1] / out_coords[3], out_coords[2] / out_coords[3]]
+
+        return None
+
+    def unproject(self, x, y, z):
+        in_coords = [x, y, z]
+        fieldmodule = self._window_coords_from.getFieldmodule()
+        fieldcache = fieldmodule.createFieldcache()
+        self._window_coords_from.assignReal(fieldcache, in_coords)
+        result, out_coords = self._global_coords_to.evaluateReal(fieldcache, 3)
+        if result == OK:
+            return out_coords  # [out_coords[0] / out_coords[3], out_coords[1] / out_coords[3], out_coords[2] / out_coords[3]]
+
+        return None
 
     def defineStandardGlyphs(self):
         '''
