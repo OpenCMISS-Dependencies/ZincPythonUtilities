@@ -236,7 +236,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
         '''
         Create finite element from a template
         '''
-        # Find a special node set named 'cmiss_nodes'
+        # Find a special node set named 'nodes'
         nodeset = field_module.findNodesetByName('nodes')
         node_template = nodeset.createNodetemplate()
 
