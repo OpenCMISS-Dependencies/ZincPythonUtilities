@@ -11,14 +11,19 @@ except ImportError:
 from opencmiss.zinc.sceneviewer import Sceneviewer, Sceneviewerevent
 from opencmiss.zinc.sceneviewerinput import Sceneviewerinput
 from opencmiss.zinc.element import Element, Elementbasis
-from opencmiss.zinc.scenecoordinatesystem import SCENECOORDINATESYSTEM_LOCAL, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT, SCENECOORDINATESYSTEM_WORLD
+from opencmiss.zinc.scenecoordinatesystem import \
+        SCENECOORDINATESYSTEM_LOCAL, \
+        SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT,\
+        SCENECOORDINATESYSTEM_WORLD
 from opencmiss.zinc.field import Field
 from opencmiss.zinc.glyph import Glyph
 from opencmiss.zinc.status import OK
 
 # mapping from qt to zinc start
 # Create a button map of Qt mouse buttons to Zinc input buttons
-button_map = {QtCore.Qt.LeftButton: Sceneviewerinput.BUTTON_TYPE_LEFT, QtCore.Qt.MidButton: Sceneviewerinput.BUTTON_TYPE_MIDDLE, QtCore.Qt.RightButton: Sceneviewerinput.BUTTON_TYPE_RIGHT}
+button_map = {QtCore.Qt.LeftButton: Sceneviewerinput.BUTTON_TYPE_LEFT,
+              QtCore.Qt.MidButton: Sceneviewerinput.BUTTON_TYPE_MIDDLE,
+              QtCore.Qt.RightButton: Sceneviewerinput.BUTTON_TYPE_RIGHT}
 # Create a modifier map of Qt modifier keys to Zinc modifier keys
 def modifier_map(qt_modifiers):
     '''
@@ -137,7 +142,8 @@ class ZincWidget(QtOpenGL.QGLWidget):
 
         # From the scene viewer module we can create a scene viewer, we set up the
         # scene viewer to have the same OpenGL properties as the QGLWidget.
-        self._scene_viewer = scene_viewer_module.createSceneviewer(Sceneviewer.BUFFERING_MODE_DOUBLE, Sceneviewer.STEREO_MODE_DEFAULT)
+        self._scene_viewer = scene_viewer_module.createSceneviewer(Sceneviewer.BUFFERING_MODE_DOUBLE,
+                                                                   Sceneviewer.STEREO_MODE_DEFAULT)
         # Create a filter for visibility flags which will allow us to see our graphic.
         filter_module = self._context.getScenefiltermodule()
         # By default graphics are created with their visibility flags set to on (or true).
@@ -171,8 +177,12 @@ class ZincWidget(QtOpenGL.QGLWidget):
         # Set up unproject pipeline
         self._window_coords_from = fieldmodule.createFieldConstant([0, 0, 0])
         self._global_coords_from = fieldmodule.createFieldConstant([0, 0, 0])
-        unproject = fieldmodule.createFieldSceneviewerProjection(self._scene_viewer, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT, SCENECOORDINATESYSTEM_WORLD)
-        project = fieldmodule.createFieldSceneviewerProjection(self._scene_viewer, SCENECOORDINATESYSTEM_WORLD, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT)
+        unproject = fieldmodule.createFieldSceneviewerProjection(self._scene_viewer,
+                                                                 SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT,
+                                                                 SCENECOORDINATESYSTEM_WORLD)
+        project = fieldmodule.createFieldSceneviewerProjection(self._scene_viewer,
+                                                               SCENECOORDINATESYSTEM_WORLD, 
+                                                               SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT)
 
 #         unproject_t = fieldmodule.createFieldTranspose(4, unproject)
         self._global_coords_to = fieldmodule.createFieldProjection(self._window_coords_from, unproject)
@@ -283,7 +293,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
         element_template.setNumberOfNodes(element_node_count)
         # Specify the dimension and the interpolation function for the element basis function
         linear_basis = field_module.createElementbasis(3, Elementbasis.FUNCTION_TYPE_LINEAR_LAGRANGE)
-        # the indecies of the nodes in the node template we want to use.
+        # the indicies of the nodes in the node template we want to use.
         node_indexes = [1, 2, 3, 4, 5, 6, 7, 8]
 
 
@@ -343,7 +353,9 @@ class ZincWidget(QtOpenGL.QGLWidget):
         If the shift key is also pressed then the new selection will be added to 
         the current selection, otherwise the current selection is cleared.
         '''
-        if (mouseevent.modifiers() & QtCore.Qt.CTRL) and (self._nodeSelectMode or self._elemSelectMode) and button_map[mouseevent.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
+        if (mouseevent.modifiers() & QtCore.Qt.CTRL) and
+                (self._nodeSelectMode or self._elemSelectMode) and
+                button_map[mouseevent.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
             self._selectionPositionStart = (mouseevent.x(), mouseevent.y())
             self._selectionMode = _SelectionMode.EXCULSIVE
             if mouseevent.modifiers() & QtCore.Qt.SHIFT:
@@ -385,7 +397,10 @@ class ZincWidget(QtOpenGL.QGLWidget):
             else:
 
                 self._scene_picker.setSceneviewerRectangle(self._scene_viewer, SCENECOORDINATESYSTEM_LOCAL, x - 0.5, y - 0.5, x + 0.5, y + 0.5);
-                if self._nodeSelectMode and self._elemSelectMode and self._selectionMode == _SelectionMode.EXCULSIVE and not self._scene_picker.getNearestGraphics().isValid():
+                if self._nodeSelectMode and
+                        self._elemSelectMode and
+                        self._selectionMode == _SelectionMode.EXCULSIVE and not 
+                        self._scene_picker.getNearestGraphics().isValid():
                     self._selectionGroup.clear()
 
                 if self._nodeSelectMode and (self._scene_picker.getNearestGraphics().getFieldDomainType() == Field.DOMAIN_TYPE_NODES):
@@ -408,7 +423,11 @@ class ZincWidget(QtOpenGL.QGLWidget):
                         else:
                             group.addNode(node)
 
-                if self._elemSelectMode and (self._scene_picker.getNearestGraphics().getFieldDomainType() in [Field.DOMAIN_TYPE_MESH1D, Field.DOMAIN_TYPE_MESH2D, Field.DOMAIN_TYPE_MESH3D, Field.DOMAIN_TYPE_MESH_HIGHEST_DIMENSION]):
+                if self._elemSelectMode and
+                    (self._scene_picker.getNearestGraphics().getFieldDomainType() in [Field.DOMAIN_TYPE_MESH1D,
+                                                                                      Field.DOMAIN_TYPE_MESH2D,
+                                                                                      Field.DOMAIN_TYPE_MESH3D,
+                                                                                      Field.DOMAIN_TYPE_MESH_HIGHEST_DIMENSION]):
                     elem = self._scene_picker.getNearestElement()
                     mesh = elem.getMesh()
 
@@ -470,5 +489,4 @@ class ZincWidget(QtOpenGL.QGLWidget):
                 scene_input.setPosition(-1, -1)
 
             self._scene_viewer.processSceneviewerinput(scene_input)
-
 
