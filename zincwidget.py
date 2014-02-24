@@ -77,6 +77,12 @@ class ZincWidget(QtOpenGL.QGLWidget):
         '''
         self._context = context
 
+    def getContext(self):
+        if not self._context is None:
+            return self._context
+        else:
+            raise RuntimeError("Zinc context has not been set.")
+
     def getSceneviewer(self):
         '''
         Get the scene viewer for this ZincWidget.
