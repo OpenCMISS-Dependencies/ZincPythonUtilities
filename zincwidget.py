@@ -41,6 +41,14 @@ class _SelectionMode(object):
 # selectionMode end
 
 class ZincWidget(QtOpenGL.QGLWidget):
+    
+    try:
+        # PySide
+        graphicsInitialized = QtCore.Signal()
+    except AttributError:
+        # PyQt
+        graphicsInitialized = QtCore.pyqtSignal()
+    
 
     # init start
     def __init__(self, parent=None):
@@ -172,6 +180,13 @@ class ZincWidget(QtOpenGL.QGLWidget):
 
         self._scene_viewer_notifier = self._scene_viewer.createSceneviewernotifier()
         self._scene_viewer_notifier.setCallback(self._zincSceneviewerEvent)
+        
+        # Notify the user that the graphics are ready to use.
+        # This must be called after initializeGL has exited so use a
+        # timer to create a callback that will be called from the
+        # event loop.
+        QtCore.QTimer.singleShot(0, self.graphicsInitialized.emit)
+
         # initializeGL end
 
     def getLookAtParameters(self):
