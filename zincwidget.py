@@ -24,6 +24,7 @@ from opencmiss.zinc.status import OK
 button_map = {QtCore.Qt.LeftButton: Sceneviewerinput.BUTTON_TYPE_LEFT,
               QtCore.Qt.MidButton: Sceneviewerinput.BUTTON_TYPE_MIDDLE,
               QtCore.Qt.RightButton: Sceneviewerinput.BUTTON_TYPE_RIGHT}
+
 # Create a modifier map of Qt modifier keys to Zinc modifier keys
 def modifier_map(qt_modifiers):
     '''
@@ -350,11 +351,11 @@ class ZincWidget(QtOpenGL.QGLWidget):
         '''
         Inform the scene viewer of a mouse press event.  Performs selection
         on left mouse click if the ctrl key is pressed and selection of some sort is enabled.
-        If the shift key is also pressed then the new selection will be added to 
+        If the shift key is also pressed then the new selection will be added to
         the current selection, otherwise the current selection is cleared.
         '''
-        if (mouseevent.modifiers() & QtCore.Qt.CTRL) and
-                (self._nodeSelectMode or self._elemSelectMode) and
+        if (mouseevent.modifiers() & QtCore.Qt.CTRL) and \
+                (self._nodeSelectMode or self._elemSelectMode) and \
                 button_map[mouseevent.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
             self._selectionPositionStart = (mouseevent.x(), mouseevent.y())
             self._selectionMode = _SelectionMode.EXCULSIVE
@@ -387,7 +388,9 @@ class ZincWidget(QtOpenGL.QGLWidget):
                 right = max(x, self._selectionPositionStart[0])
                 bottom = min(y, self._selectionPositionStart[1])
                 top = max(y, self._selectionPositionStart[1])
-                self._scene_picker.setSceneviewerRectangle(self._scene_viewer, SCENECOORDINATESYSTEM_LOCAL, left, bottom, right, top);
+                self._scene_picker.setSceneviewerRectangle(self._scene_viewer,
+                                                           SCENECOORDINATESYSTEM_LOCAL,
+                                                           left, bottom, right, top);
                 if self._selectionMode == _SelectionMode.EXCULSIVE:
                     self._selectionGroup.clear()
                 if self._nodeSelectMode:
@@ -396,14 +399,18 @@ class ZincWidget(QtOpenGL.QGLWidget):
                     self._scene_picker.addPickedElementsToFieldGroup(self._selectionGroup)
             else:
 
-                self._scene_picker.setSceneviewerRectangle(self._scene_viewer, SCENECOORDINATESYSTEM_LOCAL, x - 0.5, y - 0.5, x + 0.5, y + 0.5);
-                if self._nodeSelectMode and
-                        self._elemSelectMode and
-                        self._selectionMode == _SelectionMode.EXCULSIVE and not 
+                self._scene_picker.setSceneviewerRectangle(self._scene_viewer,
+                                                           SCENECOORDINATESYSTEM_LOCAL,
+                                                           x - 0.5, y - 0.5, x + 0.5, y + 0.5);
+                if self._nodeSelectMode and \
+                        self._elemSelectMode and \
+                        self._selectionMode == _SelectionMode.EXCULSIVE and not \
                         self._scene_picker.getNearestGraphics().isValid():
                     self._selectionGroup.clear()
 
-                if self._nodeSelectMode and (self._scene_picker.getNearestGraphics().getFieldDomainType() == Field.DOMAIN_TYPE_NODES):
+                if self._nodeSelectMode and \
+                        (self._scene_picker.getNearestGraphics().getFieldDomainType() == \
+                            Field.DOMAIN_TYPE_NODES):
                     node = self._scene_picker.getNearestNode()
                     nodeset = node.getNodeset()
 
@@ -423,11 +430,12 @@ class ZincWidget(QtOpenGL.QGLWidget):
                         else:
                             group.addNode(node)
 
-                if self._elemSelectMode and
-                    (self._scene_picker.getNearestGraphics().getFieldDomainType() in [Field.DOMAIN_TYPE_MESH1D,
-                                                                                      Field.DOMAIN_TYPE_MESH2D,
-                                                                                      Field.DOMAIN_TYPE_MESH3D,
-                                                                                      Field.DOMAIN_TYPE_MESH_HIGHEST_DIMENSION]):
+                if self._elemSelectMode and \
+                    (self._scene_picker.getNearestGraphics().getFieldDomainType()
+                        in [Field.DOMAIN_TYPE_MESH1D,
+                            Field.DOMAIN_TYPE_MESH2D,
+                            Field.DOMAIN_TYPE_MESH3D,
+                            Field.DOMAIN_TYPE_MESH_HIGHEST_DIMENSION]):
                     elem = self._scene_picker.getNearestElement()
                     mesh = elem.getMesh()
 
