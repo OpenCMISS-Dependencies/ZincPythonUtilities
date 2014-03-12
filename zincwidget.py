@@ -42,7 +42,7 @@ def modifier_map(qt_modifiers):
 class _SelectionMode(object):
 
     NONE = -1
-    EXCULSIVE = 0
+    EXCLUSIVE = 0
     ADDITIVE = 1
 # selectionMode end
 
@@ -375,7 +375,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
                 (self._nodeSelectMode or self._elemSelectMode or self._dataSelectMode) and \
                 button_map[mouseevent.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
             self._selectionPositionStart = (mouseevent.x(), mouseevent.y())
-            self._selectionMode = _SelectionMode.EXCULSIVE
+            self._selectionMode = _SelectionMode.EXCLUSIVE
             # Set self._selectionSticky so that using the shift key is not necessary
             # This also makes it harder to lose the current selection. 
             if self._selectionAlwaysAdditive or mouseevent.modifiers() & QtCore.Qt.SHIFT:
@@ -397,7 +397,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
         if self._selectionMode != _SelectionMode.NONE:
             x = mouseevent.x()
             y = mouseevent.y()
-            # Construct a small frustrum to look for nodes in.
+            # Construct a small frustum to look for nodes in.
             root_region = self._context.getDefaultRegion()
             root_region.beginHierarchicalChange()
             self._selectionBox.setVisibilityFlag(False)
@@ -410,7 +410,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
                 self._scene_picker.setSceneviewerRectangle(self._scene_viewer,
                                                            SCENECOORDINATESYSTEM_LOCAL,
                                                            left, bottom, right, top);
-                if self._selectionMode == _SelectionMode.EXCULSIVE:
+                if self._selectionMode == _SelectionMode.EXCLUSIVE:
                     self._selectionGroup.clear()
                 if self._nodeSelectMode or self._dataSelectMode:
                     self._scene_picker.addPickedNodesToFieldGroup(self._selectionGroup)
@@ -423,7 +423,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
                                                            x - 0.5, y - 0.5, x + 0.5, y + 0.5);
                 if self._nodeSelectMode and \
                         self._elemSelectMode and \
-                        self._selectionMode == _SelectionMode.EXCULSIVE and not \
+                        self._selectionMode == _SelectionMode.EXCLUSIVE and not \
                         self._scene_picker.getNearestGraphics().isValid():
                     self._selectionGroup.clear()
 
@@ -441,7 +441,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
                         nodegroup = self._selectionGroup.createFieldNodeGroup(nodeset)
 
                     group = nodegroup.getNodesetGroup()
-                    if self._selectionMode == _SelectionMode.EXCULSIVE:
+                    if self._selectionMode == _SelectionMode.EXCLUSIVE:
                         remove_current = group.getSize() == 1 and group.containsNode(node)
                         self._selectionGroup.clear()
                         if not remove_current:
@@ -466,7 +466,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
                         elementgroup = self._selectionGroup.createFieldElementGroup(mesh)
 
                     group = elementgroup.getMeshGroup()
-                    if self._selectionMode == _SelectionMode.EXCULSIVE:
+                    if self._selectionMode == _SelectionMode.EXCLUSIVE:
                         remove_current = group.getSize() == 1 and group.containsElement(elem)
                         self._selectionGroup.clear()
                         if not remove_current:
