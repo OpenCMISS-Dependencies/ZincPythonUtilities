@@ -74,7 +74,8 @@ class ZincWidget(QtOpenGL.QGLWidget):
         self._selectionMode = _SelectionMode.NONE
         self._selectionGroup = None
         self._selectionBox = None
-
+        self._selectionAlwaysAdditive = False
+        
         # init end
 
     def setContext(self, context):
@@ -95,6 +96,9 @@ class ZincWidget(QtOpenGL.QGLWidget):
         Get the scene viewer for this ZincWidget.
         '''
         return self._scene_viewer
+    
+    def setSelectionModeAdditive(self):
+        self._selectionAlwaysAdditive = True
 
     def setSelectModeNode(self):
         '''
@@ -372,7 +376,9 @@ class ZincWidget(QtOpenGL.QGLWidget):
                 button_map[mouseevent.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
             self._selectionPositionStart = (mouseevent.x(), mouseevent.y())
             self._selectionMode = _SelectionMode.EXCULSIVE
-            if mouseevent.modifiers() & QtCore.Qt.SHIFT:
+            # Set self._selectionSticky so that using the shift key is not necessary
+            # This also makes it harder to lose the current selection. 
+            if self._selectionAlwaysAdditive or mouseevent.modifiers() & QtCore.Qt.SHIFT:
                 self._selectionMode = _SelectionMode.ADDITIVE
         else:
 
