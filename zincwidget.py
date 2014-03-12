@@ -69,6 +69,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
 
         # Selection attributes
         self._nodeSelectMode = True
+        self._dataSelectMode = True
         self._elemSelectMode = True
         self._selectionMode = _SelectionMode.NONE
         self._selectionGroup = None
@@ -100,20 +101,31 @@ class ZincWidget(QtOpenGL.QGLWidget):
         Set the selection mode to select *only* nodes.
         '''
         self._nodeSelectMode = True
+        self._dataSelectMode = False
+        self._elemSelectMode = False
+
+    def setSelectModeData(self):
+        '''
+        Set the selection mode to select *only* datapoints.
+        '''
+        self._nodeSelectMode = False
+        self._dataSelectMode = True
         self._elemSelectMode = False
 
     def setSelectModeElement(self):
         '''
         Set the selection mode to select *only* elements.
         '''
-        self._elemSelectMode = True
         self._nodeSelectMode = False
+        self._dataSelectMode = False
+        self._elemSelectMode = True
 
     def setSelectModeAll(self):
         '''
         Set the selection mode to select both nodes and elements.
         '''
         self._nodeSelectMode = True
+        self._dataSelectMode = True
         self._elemSelectMode = True
         
     def setSelectModeNone(self):
@@ -121,6 +133,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
         Turn selection off.
         '''
         self._nodeSelectMode = False
+        self._dataSelectMode = False
         self._elemSelectMode = False
         
     def setProjectionMode(self, mode):
@@ -355,7 +368,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
         the current selection, otherwise the current selection is cleared.
         '''
         if (mouseevent.modifiers() & QtCore.Qt.CTRL) and \
-                (self._nodeSelectMode or self._elemSelectMode) and \
+                (self._nodeSelectMode or self._elemSelectMode or self._dataSelectMode) and \
                 button_map[mouseevent.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
             self._selectionPositionStart = (mouseevent.x(), mouseevent.y())
             self._selectionMode = _SelectionMode.EXCULSIVE
@@ -393,7 +406,7 @@ class ZincWidget(QtOpenGL.QGLWidget):
                                                            left, bottom, right, top);
                 if self._selectionMode == _SelectionMode.EXCULSIVE:
                     self._selectionGroup.clear()
-                if self._nodeSelectMode:
+                if self._nodeSelectMode or self._dataSelectMode:
                     self._scene_picker.addPickedNodesToFieldGroup(self._selectionGroup)
                 if self._elemSelectMode:
                     self._scene_picker.addPickedElementsToFieldGroup(self._selectionGroup)
@@ -408,9 +421,12 @@ class ZincWidget(QtOpenGL.QGLWidget):
                         self._scene_picker.getNearestGraphics().isValid():
                     self._selectionGroup.clear()
 
-                if self._nodeSelectMode and \
-                        (self._scene_picker.getNearestGraphics().getFieldDomainType() == \
-                            Field.DOMAIN_TYPE_NODES):
+                if ((self._nodeSelectMode and \
+                        (self._scene_picker.getNearestGraphics().getFieldDomainType()
+                            in [Field.DOMAIN_TYPE_NODES])) or \
+                    (self._dataSelectMode and \
+                        (self._scene_picker.getNearestGraphics().getFieldDomainType()
+                            in [Field.DOMAIN_TYPE_DATAPOINTS]))):
                     node = self._scene_picker.getNearestNode()
                     nodeset = node.getNodeset()
 
