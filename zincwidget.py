@@ -140,6 +140,9 @@ class ZincWidget(QtOpenGL.QGLWidget):
         self._dataSelectMode = False
         self._elemSelectMode = False
         
+    def getSelectionGroup(self):
+        return self._selectionGroup
+        
     def setProjectionMode(self, mode):
         '''
         Set the projection mode for this scene viewer.
