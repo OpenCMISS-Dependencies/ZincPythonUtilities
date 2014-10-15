@@ -110,7 +110,6 @@ class ZincWidget(QtOpenGL.QGLWidget):
             unproject = fieldmodule.createFieldSceneviewerProjection(self._sceneviewer, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT, SCENECOORDINATESYSTEM_WORLD)
             project = fieldmodule.createFieldSceneviewerProjection(self._sceneviewer, SCENECOORDINATESYSTEM_WORLD, SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT)
 
-    #         unproject_t = fieldmodule.createFieldTranspose(4, unproject)
             self._global_coords_to = fieldmodule.createFieldProjection(self._window_coords_from, unproject)
             self._window_coords_to = fieldmodule.createFieldProjection(self._global_coords_from, project)
 
@@ -118,9 +117,6 @@ class ZincWidget(QtOpenGL.QGLWidget):
             self._sceneviewer.viewAll()
             self._interactiveTool.setSceneviewer(self._sceneviewer)
             self._interactiveDlg.show()
-    #  Not really applicable to us yet.
-    #         self._selection_notifier = scene.createSelectionnotifier()
-    #         self._selection_notifier.setCallback(self._zincSelectionEvent)
 
             self._sceneviewernotifier = self._sceneviewer.createSceneviewernotifier()
             self._sceneviewernotifier.setCallback(self._zincSceneviewerEvent)
@@ -154,27 +150,17 @@ class ZincWidget(QtOpenGL.QGLWidget):
         self._sceneviewer.setViewAngle(angle)
         self._sceneviewer.endChange()
 
+    def setScene(self, scene):
+        scenefilter = self._scenepicker.getScenefilter()
+        self._scenepicker = scene.createScenepicker()
+        self._scenepicker.setScenefilter(scenefilter)
+        self.createSelectionBox(scene)
+
     def setScenefilter(self, scenefilter):
         self._sceneviewer.setScenefilter(scenefilter)
 
     def getScenefilter(self):
         result, scenefilter = self._sceneviewer.getScenefilter()
-        if result == OK:
-            return scenefilter
-
-        return None
-
-    def getScenepicker(self):
-        return self._scenepicker
-
-    def setPickingRectangle(self, coordinate_system, left, bottom, right, top):
-        self._scenepicker.setSceneviewerRectangle(self._sceneviewer, coordinate_system, left, bottom, right, top);
-
-    def setSelectionfilter(self, scenefilter):
-        self._scenepicker.setScenefilter(scenefilter)
-
-    def getSelectionfilter(self):
-        result, scenefilter = self._scenepicker.getScenefilter()
         if result == OK:
             return scenefilter
 

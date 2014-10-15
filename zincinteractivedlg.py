@@ -76,6 +76,7 @@ class ZincInteractiveDlg(QtGui.QWidget):
         self.ui.enableSelection.stateChanged.connect(self.enableSelectionToggle)
         self.ui.enableEdit.stateChanged.connect(self.enableEditToggle)
         self.ui.enableCreate.stateChanged.connect(self.enableCreateToggle)
+        self.ui.enableConstrain.stateChanged.connect(self.enableConstrainToggle)
              
     def enableSelectionToggle(self):
         self.interactiveTool.setNodeSelection(self.ui.enableSelection.isChecked())
@@ -85,6 +86,9 @@ class ZincInteractiveDlg(QtGui.QWidget):
             
     def enableCreateToggle(self):
         self.interactiveTool.setNodeCreateMode(self.ui.enableCreate.isChecked())
+        
+    def enableConstrainToggle(self):
+        self.interactiveTool.setNodeConstrainToSurfacesMode(self.ui.enableConstrain.isChecked())
     
     def lineSelectionToggle(self):
         self.interactiveTool.setLineSelection(self.ui.linesSelection.isChecked())

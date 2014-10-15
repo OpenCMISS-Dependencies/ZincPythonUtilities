@@ -24,8 +24,9 @@ from opencmiss.zinc.scenecoordinatesystem import \
         SCENECOORDINATESYSTEM_LOCAL, \
         SCENECOORDINATESYSTEM_WINDOW_PIXEL_TOP_LEFT,\
         SCENECOORDINATESYSTEM_WORLD
-from opencmiss.zinc.field import Field
+from opencmiss.zinc.field import Field, FieldFindMeshLocation
 from opencmiss.zinc.glyph import Glyph
+from opencmiss.zinc.graphics import Graphics
 from opencmiss.zinc.status import OK
 import math
 
@@ -51,6 +52,23 @@ def modifier_map(qt_modifiers):
 
 SELECTION_RUBBERBAND_NAME = 'selection_rubberband'
 
+class NodeEditInfo():
+    
+    def __init__(self):
+        self.reset()
+    
+    def reset(self):
+        self._node = None
+        self._graphics = None
+        self._coordinateField = None
+        self._orientationField = None
+        self._glyphCentre = [0.0, 0.0, 0.0]
+        self._glyphSize = [0.0, 0.0, 0.0]
+        self._glyphScaleFactors = [0.0, 0.0, 0.0]
+        self._variableScaleField = Field()        
+        self._nearestElement = None
+        self._elementCoordinateField = None
+        self._createCoordinatesField = None
 # selectionMode start
 class SelectionMode(object):
 
@@ -59,6 +77,7 @@ class SelectionMode(object):
     ADDITIVE = 1
     EDIT_POSITION = 2
     EDIT_VECTOR = 3
+    CREATE = 4
 # selectionMode end
 
 class ZincInteractiveTool():
@@ -68,8 +87,9 @@ class ZincInteractiveTool():
         # Selection attributes
         self._nodeSelectMode = False
         self._nodeEditMode = False
-        self._nodeEditVectorMode = True
+        self._nodeEditVectorMode = False
         self._nodeCreateMode = False
+        self._nodeConstrainMode = False
         self._dataSelectMode = False
         self._1delemSelectMode = False
         self._2delemSelectMode = False
@@ -79,17 +99,22 @@ class ZincInteractiveTool():
         self._selection_box = None
         self._ignore_mouse_events = False
         self._editModifier = QtCore.Qt.CTRL
-        self._editReferenceNode = None
-        self._editGraphics = None
-        self._selectedCoordinateField = None
-        self._selectedOrientationField = None
+        self._selectionModifier = QtCore.Qt.SHIFT
+        self._additiveSelectionModifier = QtCore.Qt.ALT
         self._sceneviewer = None
         self._zincwidget = zincwidget
-        self._variable_scale_field = None;
-        self._editGlyphCentre = [0.0, 0.0, 0.0]
-        self._editGlyphSize = [0.0, 0.0, 0.0]
-        self._editGlyphScaleFactors = [0.0, 0.0, 0.0]
-        self._editVariableScaleField = Field()
+        self._nodeEditInfo = NodeEditInfo()
+        self._sceneSurfacesFilter = None
+        self._createCoordinatesField = None
+        
+    def setAdditiveSelectionModifier(self, modifierIn):
+        self._additiveSelectionModifier = modifierIn
+        
+    def setEditModifier(self, modifierIn):
+        self._editModifier = modifierIn
+        
+    def setSelectionModifier(self, modifierIn):
+        self._selectionModifier = modifierIn
                                        
     def setSceneviewer(self, sceneviewer):    
         self._sceneviewer = sceneviewer
@@ -106,7 +131,11 @@ class ZincInteractiveTool():
 
             self._scenepicker = scene.createScenepicker()
             self._scenepicker.setScenefilter(graphics_filter)
-
+            sceneFilterModule = self._zincwidget.getContext().getScenefiltermodule()
+            self._sceneSurfacesFilter = sceneFilterModule.createScenefilterOperatorAnd()
+            surfacesFilter = sceneFilterModule.createScenefilterGraphicsType(Graphics.TYPE_SURFACES)
+            self._sceneSurfacesFilter.appendOperand(graphics_filter)
+            self._sceneSurfacesFilter.appendOperand(surfacesFilter)
             # If the standard glyphs haven't been defined then the
             # selection box will not be visible
             self.createSelectionBox(scene)
@@ -117,8 +146,14 @@ class ZincInteractiveTool():
     def setNodeEdit(self, enabled):
         self._nodeEditMode = enabled
         
+    def setNodeConstrainToSurfacesMode(self, enabled):
+        self._nodeConstrainMode = enabled
+
     def setNodeCreateMode(self, enabled):
         self._nodeCreateMode = enabled
+        
+    def setNodeCreateCoordinatesField(self, coordinatesField):
+        self._createCoordinatesField = coordinatesField
         
     def setSelectionModeAdditive(self):
         self._selectionAlwaysAdditive = True
@@ -151,15 +186,6 @@ class ZincInteractiveTool():
         self._selectionBox_setGlyphOffset = attributes.setGlyphOffset   
         self._selection_box.setVisibilityFlag(False)
     
-    def getScenefilter(self):
-        result, scenefilter = self._sceneviewer.getScenefilter()
-        if result == OK:
-            return scenefilter
-        return None
-
-    def setScenefilter(self, scenefilter):
-        self._sceneviewer.setScenefilter(scenefilter)
-
     def getScenepicker(self):
         return self._scenepicker
 
@@ -174,13 +200,7 @@ class ZincInteractiveTool():
         if result == OK:
             return scenefilter
         return None
-    
-    def setScene(self, scene):
-        scenefilter = self._scenepicker.getScenefilter()
-        self._scenepicker = scene.createScenepicker()
-        self._scenepicker.setScenefilter(scenefilter)
-        self.createSelectionBox(scene)
-        
+            
     def _getNearestGraphic(self, x, y, domain_type):
         self._scenepicker.setSceneviewerRectangle(self._sceneviewer, SCENECOORDINATESYSTEM_LOCAL, x - 0.5, y - 0.5, x + 0.5, y + 0.5)
         nearest_graphics = self._scenepicker.getNearestGraphics()
@@ -218,6 +238,9 @@ class ZincInteractiveTool():
     def createCoordinatesVectorsGraphics(self, scene, coordinateField, valueLabel, \
                                              versionNumber, baseSizes, scaleFactors, selectMode, \
                                              material, selectedMaterial):
+        '''
+        Create graphics for the vector of the supplied scene which allow the vector to be edited. 
+        '''
         fieldmodule = scene.getRegion().getFieldmodule()
         derivativeField =  fieldmodule.createFieldNodeValue(coordinateField, valueLabel, versionNumber)
         if derivativeField.isValid():
@@ -345,34 +368,34 @@ class ZincInteractiveTool():
             size[2]=magnitude;
         return axis1, axis2, axis3, size
  
-    def getVectorDelta(self, x, y):
+    def getVectorDelta(self, nodeEditInfo, x, y):
         '''
         Get the delta of position between selected nodes and provided windows coordinates
         '''
         delta = [0.0, 0.0, 0.0]
-        fieldmodule = self._editReferenceNode.getNodeset().getFieldmodule()
+        fieldmodule = nodeEditInfo._node.getNodeset().getFieldmodule()
         fieldcache = fieldmodule.createFieldcache()
-        fieldcache.setNode(self._editReferenceNode)
-        numberOfComponents = self._selectedOrientationField.getNumberOfComponents()
+        fieldcache.setNode(nodeEditInfo._node)
+        numberOfComponents = nodeEditInfo._orientationField.getNumberOfComponents()
         
-        if numberOfComponents > 0 and numberOfComponents <= 9 and self._selectedOrientationField.isValid() and \
-            self._selectedCoordinateField.isValid() and self._editGlyphScaleFactors[0] != 0.0 and \
-            self._editGlyphCentre[0] == 0.0 and self._editGlyphSize[0] == 0.0 and \
-            False == self._editVariableScaleField.isValid():
-            return_code, orientation = self._selectedOrientationField.evaluateReal(fieldcache, numberOfComponents)
-            return_code, coordinates = self._selectedCoordinateField.evaluateReal(fieldcache, 3)
+        if numberOfComponents > 0 and numberOfComponents <= 9 and nodeEditInfo._orientationField.isValid() and \
+            nodeEditInfo._coordinateField.isValid() and nodeEditInfo._glyphScaleFactors[0] != 0.0 and \
+            nodeEditInfo._glyphCentre[0] == 0.0 and nodeEditInfo._glyphSize[0] == 0.0 and \
+            False == nodeEditInfo._variableScaleField.isValid():
+            return_code, orientation = nodeEditInfo._orientationField.evaluateReal(fieldcache, numberOfComponents)
+            return_code, coordinates = nodeEditInfo._coordinateField.evaluateReal(fieldcache, 3)
             axis1, axis2, axis3, num = self.makeGlyphOrientationScaleAxes(orientation)
             oldCoordinates = [coordinates[0], coordinates[1], coordinates[2]]
             endCoordinates = [0.0, 0.0, 0.0]
-            endCoordinates[0] = coordinates[0]+self._editGlyphSize[0]*self._editGlyphScaleFactors[0]*axis1[0];
-            endCoordinates[1] = coordinates[1]+self._editGlyphSize[0]*self._editGlyphScaleFactors[0]*axis1[1];
-            endCoordinates[2] = coordinates[2]+self._editGlyphSize[0]*self._editGlyphScaleFactors[0]*axis1[2];
+            endCoordinates[0] = coordinates[0]+nodeEditInfo._glyphSize[0]*nodeEditInfo._glyphScaleFactors[0]*axis1[0];
+            endCoordinates[1] = coordinates[1]+nodeEditInfo._glyphSize[0]*nodeEditInfo._glyphScaleFactors[0]*axis1[1];
+            endCoordinates[2] = coordinates[2]+nodeEditInfo._glyphSize[0]*nodeEditInfo._glyphScaleFactors[0]*axis1[2];
             projectCoordinates = self._zincwidget.project(endCoordinates[0], endCoordinates[1], endCoordinates[2])
             endCoordinates = self._zincwidget.unproject(x, y * -1.0, projectCoordinates[2])
             a = [0.0, 0.0, 0.0]
-            a[0]=(endCoordinates[0]-oldCoordinates[0])/self._editGlyphScaleFactors[0]
-            a[1]=(endCoordinates[1]-oldCoordinates[1])/self._editGlyphScaleFactors[0]
-            a[2]=(endCoordinates[2]-oldCoordinates[2])/self._editGlyphScaleFactors[0]
+            a[0]=(endCoordinates[0]-oldCoordinates[0])/nodeEditInfo._glyphScaleFactors[0]
+            a[1]=(endCoordinates[1]-oldCoordinates[1])/nodeEditInfo._glyphScaleFactors[0]
+            a[2]=(endCoordinates[2]-oldCoordinates[2])/nodeEditInfo._glyphScaleFactors[0]
             if numberOfComponents == 1:
                 delta[0] = a[0]
             elif numberOfComponents == 2 or numberOfComponents == 4:
@@ -384,26 +407,93 @@ class ZincInteractiveTool():
                 delta[2] = a[2]
 
         return delta
+    
+    def elementConstrainFunction(self, fieldmodule, fieldcache, coordinates, elementCoordinateField, meshGroup):
+        '''
+        Return new coordinates which is constrained to the meshGroup
+        '''
+        fieldLocation = fieldmodule.createFieldFindMeshLocation(elementCoordinateField, \
+                            elementCoordinateField, meshGroup)
+        fieldLocation.setSearchMode(FieldFindMeshLocation.SEARCH_MODE_NEAREST)
+        fieldcache.setFieldReal(elementCoordinateField, coordinates)
+        element, chartCoordinates = fieldLocation.evaluateMeshLocation(fieldcache, 3)
+        fieldcache.setMeshLocation(element, chartCoordinates)
+        return_code, newCoordinates = elementCoordinateField.evaluateReal(fieldcache, 3)
+        return True, newCoordinates
+    
+    def getPlacementPoint(self, nodeEditInfo, x, y):
+        '''
+        Return the world coordinates with the informations provided in nodeEditInfo
+        '''
+        if not nodeEditInfo._nearestElement:
+            if nodeEditInfo._node and nodeEditInfo._node.isValid():
+                fieldmodule = nodeEditInfo._node.getNodeset().getFieldmodule()
+                fieldcache = fieldmodule.createFieldcache()
+                fieldcache.setNode(nodeEditInfo._node)
+                return_code, coordinates = nodeEditInfo._coordinateField.evaluateReal(fieldcache, 3)
+                projectCoordinates = self._zincwidget.project(coordinates[0], coordinates[1], coordinates[2])
+                unprojectCoordinates = self._zincwidget.unproject(x, y * -1.0, projectCoordinates[2])
+                return True, unprojectCoordinates
+            else:
+                return self._scenepicker.getPickingCoordinates()
+        else:
+            fieldmodule = nodeEditInfo._nearestElement.getMesh().getFieldmodule()
+            fieldcache = fieldmodule.createFieldcache()
+            converged = False
+            fieldcache.setMeshLocation(nodeEditInfo._nearestElement, [0.5, 0.5, 0.5])
+            temp, unprojectCoordinates = self._scenepicker.getPickingCoordinates()
+            fieldcache.clearLocation()
+            mesh = nodeEditInfo._nearestElement.getMesh()
+            fieldmodule = nodeEditInfo._elementCoordinateField.getFieldmodule()
+            meshGroup = fieldmodule.createFieldGroup().createFieldElementGroup(mesh).getMeshGroup()
+            meshGroup.addElement(nodeEditInfo._nearestElement)
+            return_code = True 
+            steps = 0
+            point = unprojectCoordinates
+            while return_code == True and converged == False:
+                previous_point = point
+                temp, fe_value_point = self.elementConstrainFunction(fieldmodule, fieldcache, \
+                                                                     previous_point, \
+                                                                     nodeEditInfo._elementCoordinateField, \
+                                                                     meshGroup)
+                changes = [point[0] - fe_value_point[0], point[1] - fe_value_point[1], \
+                           point[2] - fe_value_point[2]]
+                if math.sqrt(changes[0]*changes[0] + changes[1]*changes[1] + changes[2]*changes[2]) < 1.0e-4:
+                    converged = True
+                else:
+                    point[0] = fe_value_point[0];
+                    point[1] = fe_value_point[1];
+                    point[2] = fe_value_point[2];
+                    steps = steps + 1
+                    if steps > 1000:
+                        return_code = False
+                    projectCoordinates = self._zincwidget.project(point[0], point[1], point[2])
+                    point = self._zincwidget.unproject(x * 1.0, y * -1.0, projectCoordinates[2])
+                    changes = [point[0] - previous_point[0], point[1] - previous_point[1], 
+                                        point[2] - previous_point[2]]
+                    if math.sqrt(changes[0]*changes[0] + changes[1]*changes[1] + changes[2]*changes[2]) < 1.0e-6:
+                        return_code = False
+            return True, point
         
-    def getCoordinatesDelta(self, x, y):
+    def getCoordinatesDelta(self, nodeEditInfo, x, y):
         '''
         Get the delta of position between selected nodes and provided windows coordinates
         '''
-        fieldmodule = self._editReferenceNode.getNodeset().getFieldmodule()
+        fieldmodule = nodeEditInfo._node.getNodeset().getFieldmodule()
         fieldcache = fieldmodule.createFieldcache()
-        fieldcache.setNode(self._editReferenceNode)
-        return_code, coordinates = self._selectedCoordinateField.evaluateReal(fieldcache, 3)
-        projectCoordinates = self._zincwidget.project(coordinates[0], coordinates[1], coordinates[2])
-        unprojectCoordinates = self._zincwidget.unproject(x, y * -1.0, projectCoordinates[2])
-        #print "coordinates " + str(coordinates)
-        #print "x, y " + str(x) + " " + str(y)
-        #print "projectCoordinates " + str(projectCoordinates)
-        #print "unprojectCoordinates " + str(unprojectCoordinates)
-        delta = [unprojectCoordinates[0] - coordinates[0], unprojectCoordinates[1] - coordinates[1], \
-                 unprojectCoordinates[2] - coordinates[2]]
+        fieldcache.setNode(nodeEditInfo._node)
+        delta = [0.0, 0.0, 0.0]
+        return_code, coordinates = nodeEditInfo._coordinateField.evaluateReal(fieldcache, 3)
+        return_code, newCoordinates = self.getPlacementPoint(nodeEditInfo, x, y)
+        if return_code:
+            delta = [newCoordinates[0] - coordinates[0],  newCoordinates[1] - coordinates[1],\
+                     newCoordinates[2] - coordinates[2]]
         return delta
     
     def updateNodePositionWithDelta(self, fieldcache, coordinateField, node, xdiff, ydiff, zdiff):
+        '''
+        Updated coordinates of a single node with delta
+        '''
         fieldcache.setNode(node)
         return_code, coordinates = coordinateField.evaluateReal(fieldcache, 3)
         coordinateField.assignReal(fieldcache, [coordinates[0]+xdiff, \
@@ -425,8 +515,11 @@ class ZincInteractiveTool():
 #                    while node.isValid():                        
 #                        node = iterator.next()
             
-    def updateSelectedNodesCoordinatesWithDelta(self, xdiff, ydiff, zdiff):
-        nodegroup = self._selectionGroup.getFieldNodeGroup(self._editReferenceNode.getNodeset())
+    def updateSelectedNodesCoordinatesWithDelta(self, nodeEditInfo, selectionGroup, xdiff, ydiff, zdiff):
+        '''
+        Updated nodes in the selection group with delta
+        '''
+        nodegroup = selectionGroup.getFieldNodeGroup(nodeEditInfo._node.getNodeset())
         if nodegroup.isValid():
             group = nodegroup.getNodesetGroup()
             if group.isValid():
@@ -436,14 +529,17 @@ class ZincInteractiveTool():
                 iterator = group.createNodeiterator()
                 node = iterator.next()
                 while node.isValid():            
-                    self.updateNodePositionWithDelta(fieldcahce, self._selectedCoordinateField, \
+                    self.updateNodePositionWithDelta(fieldcahce, nodeEditInfo._coordinateField, \
                                                      node, xdiff, ydiff, zdiff)            
                     node = iterator.next()
                 fieldmodule.endChange()
                 
     def updateNodeVectorWithDelta(self, fieldcache, orientationField, node, xdiff, ydiff, zdiff):
+        '''
+        Updated the orientation field of a node with delta
+        '''
         fieldcache.setNode(node)
-        numberOfComponents = self._selectedOrientationField.getNumberOfComponents()
+        numberOfComponents = orientationField.getNumberOfComponents()
         return_code, orientationScale = orientationField.evaluateReal(fieldcache, numberOfComponents)
         if numberOfComponents == 1:
             orientationScale[0] = xdiff
@@ -456,8 +552,11 @@ class ZincInteractiveTool():
             orientationScale[2] = zdiff
         orientationField.assignReal(fieldcache, orientationScale)
                 
-    def updateSelectedNodesVectorWithDelta(self, xdiff, ydiff, zdiff):
-        nodegroup = self._selectionGroup.getFieldNodeGroup(self._editReferenceNode.getNodeset())
+    def updateSelectedNodesVectorWithDelta(self, nodeEditInfo, selectionGroup, xdiff, ydiff, zdiff):
+        '''
+        Updated orientation field provided at nodes in the selection group with delta
+        '''
+        nodegroup = selectionGroup.getFieldNodeGroup(nodeEditInfo._node.getNodeset())
         if nodegroup.isValid():
             group = nodegroup.getNodesetGroup()
             if group.isValid():
@@ -467,27 +566,19 @@ class ZincInteractiveTool():
                 iterator = group.createNodeiterator()
                 node = iterator.next()
                 while node.isValid():            
-                    self.updateNodeVectorWithDelta(fieldcahce, self._selectedOrientationField, \
+                    self.updateNodeVectorWithDelta(fieldcahce, nodeEditInfo._orientationField, \
                                                      node, xdiff, ydiff, zdiff)            
                     node = iterator.next()
                 fieldmodule.endChange()            
-    
-        
-#  Not applicable at the current point in time.
-#     def _zincSelectionEvent(self, event):
-#         print(event.getChangeFlags())
-#         print('go the selection change')
-
-
+   
     def nodeIsSelectedAtCoordinates(self, x, y):
         '''
         Return node and its coordinates field if its valid
         '''
         self._scenepicker.setSceneviewerRectangle(self._sceneviewer, SCENECOORDINATESYSTEM_LOCAL, \
-                                                  x - 3.5, y - 3.5, \
-                                                  x + 3.5, y + 3.5);
+                                                  x - 3, y - 3, \
+                                                  x + 3, y + 3);
         node = self._scenepicker.getNearestNode()
-        print node.isValid()
         if node.isValid():
             nodeset = node.getNodeset()
             nodegroup = self._selectionGroup.getFieldNodeGroup(nodeset)
@@ -498,38 +589,74 @@ class ZincInteractiveTool():
                     if graphics.getFieldDomainType() == Field.DOMAIN_TYPE_NODES:
                         return True, node, graphics.getCoordinateField(), graphics
         return False, None, None, None
+    
+    def getNearestSurfacesElementAndCoordinates(self, x, y):
+        '''
+        Return element and its coordinates field if its valid
+        '''
+        self._scenepicker.setSceneviewerRectangle(self._sceneviewer, SCENECOORDINATESYSTEM_LOCAL, \
+                                                  x - 3, y - 3, x + 3, y + 3)
+        nearestGraphics = self._scenepicker.getNearestGraphics()
+        if nearestGraphics.isValid():
+            surfacesGraphics = nearestGraphics.castSurfaces()
+            if surfacesGraphics.isValid():
+                nearestElement = self._scenepicker.getNearestElement()
+                elementCoordinateField = surfacesGraphics.getCoordinateField()
+                return True, nearestElement, elementCoordinateField
+        return False, None, None
+    
+    def createNodeAtCoordinates(self, nodeEditInfo, x, y):
+        '''
+        Create a new node at a location based on information provided by nodeEditInfo 
+        '''
+        return_code, newCoordinates = self.getPlacementPoint(nodeEditInfo, x, y)
+        if nodeEditInfo._createCoordinatesField and nodeEditInfo._createCoordinatesField.isValid():
+            fieldmodule = nodeEditInfo._createCoordinatesField.getFieldmodule()
+            fieldmodule.beginChange()
+            nodeset = fieldmodule.findNodesetByFieldDomainType(Field.DOMAIN_TYPE_NODES)
+            nodetemplate = nodeset.createNodetemplate()
+            nodetemplate.defineField(nodeEditInfo._createCoordinatesField)
+            node = nodeset.createNode(-1, nodetemplate)
+            fieldcache = fieldmodule.createFieldcache()
+            fieldcache.setNode(node)
+            nodeEditInfo._createCoordinatesField.assignReal(fieldcache, newCoordinates)
+            fieldmodule.endChange()
         
     def proceedSceneViewerMousePressEvent(self, event):
         '''
         Inform the scene viewer of a mouse press event.
         '''
         self._handle_mouse_events = False  # Track when the zinc should be handling mouse events
-        if not self._ignore_mouse_events and (event.modifiers() & QtCore.Qt.SHIFT) and (self._nodeSelectMode or self._elemSelectMode) and button_map[event.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
+        if not self._ignore_mouse_events and (event.modifiers() & self._selectionModifier) and (self._nodeSelectMode or self._elemSelectMode) and button_map[event.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
             self._selection_position_start = (event.x(), event.y())
             self._selection_mode = SelectionMode.EXCLUSIVE
-            if event.modifiers() & QtCore.Qt.ALT:
+            if event.modifiers() & self._additiveSelectionModifier:
                 self._selection_mode = SelectionMode.ADDITIVE
-        elif not self._ignore_mouse_events and (event.modifiers() & self._editModifier) and (self._nodeEditMode or self._nodeEditVectorMode) and button_map[event.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
+        elif not self._ignore_mouse_events and (event.modifiers() & self._editModifier) and \
+            (self._nodeEditMode or self._nodeEditVectorMode or self._nodeCreateMode) and \
+            button_map[event.button()] == Sceneviewerinput.BUTTON_TYPE_LEFT:
             return_code, selectedNode, selectedCoordinateField, selectedGraphics = \
                 self.nodeIsSelectedAtCoordinates(event.x(), event.y())
             if return_code:
-                self._selection_mode = SelectionMode.EDIT_POSITION
-                self._editReferenceNode = selectedNode
-                self._selectedCoordinateField = selectedCoordinateField
-                self._editGraphics = selectedGraphics
+                self._nodeEditInfo._node = selectedNode
+                self._nodeEditInfo._coordinateField = selectedCoordinateField
+                self._nodeEditInfo._graphics = selectedGraphics
                 self._selection_position_start = (event.x(), event.y())
-                if self._nodeEditVectorMode:
-                    attributes = self._editGraphics.getGraphicspointattributes()
+                if self._nodeEditMode:
+                    self._selection_mode = SelectionMode.EDIT_POSITION
+                else:
+                    attributes = self._nodeEditInfo._graphics.getGraphicspointattributes()
                     if attributes.isValid():
-                        self._selectedOrientationField = attributes.getOrientationScaleField()
-                        if self._selectedOrientationField and self._selectedOrientationField.isValid():
-                            self._variable_scale_field = attributes.getSignedScaleField()
+                        self._nodeEditInfo._orientationField = attributes.getOrientationScaleField()
+                        if self._nodeEditInfo._orientationField and self._nodeEditInfo._orientationField.isValid():
                             self._selection_mode = SelectionMode.EDIT_VECTOR
-                            return_code, self._editGlyphCentre = attributes.getGlyphOffset(3)
-                            return_code, self._editGlyphSize = attributes.getBaseSize(3)
-                            return_code, self._editGlyphScaleFactors = attributes.getScaleFactors(3)
-                            self._editVariableScaleField = attributes.getSignedScaleField()
-        elif not self._ignore_mouse_events and not event.modifiers() or (event.modifiers() & QtCore.Qt.SHIFT and button_map[event.button()] == Sceneviewerinput.BUTTON_TYPE_RIGHT):
+                            return_code, self._nodeEditInfo._glyphCentre = attributes.getGlyphOffset(3)
+                            return_code, self._nodeEditInfo._glyphSize = attributes.getBaseSize(3)
+                            return_code, self._nodeEditInfo._glyphScaleFactors = attributes.getScaleFactors(3)
+                            self._nodeEditInfo._variableScaleField = attributes.getSignedScaleField()
+            elif self._nodeCreateMode:
+                self._selection_mode = SelectionMode.CREATE
+        elif not self._ignore_mouse_events and not event.modifiers() or (event.modifiers() & self._selectionModifier and button_map[event.button()] == Sceneviewerinput.BUTTON_TYPE_RIGHT):
             scene_input = self._sceneviewer.createSceneviewerinput()
             scene_input.setPosition(event.x(), event.y())
             scene_input.setEventType(Sceneviewerinput.EVENT_TYPE_BUTTON_PRESS)
@@ -546,15 +673,23 @@ class ZincInteractiveTool():
         '''
         Inform the scene viewer of a mouse release event.
         '''
-        if not self._ignore_mouse_events and ( self._selection_mode == SelectionMode.EDIT_POSITION or \
+        if not self._ignore_mouse_events and (self._selection_mode == SelectionMode.EDIT_POSITION or \
                                               self._selection_mode == SelectionMode.EDIT_VECTOR):
-            self._editReferenceNode = None
-            self._editGraphics = None
-            self._selection_mode = SelectionMode.NONE
-            self._selectedCoordinateField = None
-            self._selectedOrientationField = None
-            self._variable_scale_field = None
-            self._editVariableScaleField = Field()
+            self._nodeEditInfo.reset()
+        elif not self._ignore_mouse_events and self._selection_mode == SelectionMode.CREATE:
+            x = event.x()
+            y = event.y()
+            self._selection_box.setVisibilityFlag(False)
+            if self._createCoordinatesField and self._createCoordinatesField.isValid():
+                self._nodeEditInfo._createCoordinatesField = self._createCoordinatesField
+                if self._nodeConstrainMode == True:
+                    returnCode, self._nodeEditInfo._nearestElement, self._nodeEditInfo._elementCoordinateField = \
+                        self.getNearestSurfacesElementAndCoordinates(x, y)
+                    if self._nodeEditInfo._nearestElement and self._nodeEditInfo._elementCoordinateField:
+                        self.createNodeAtCoordinates(self._nodeEditInfo, x, y)   
+                else:
+                    self.createNodeAtCoordinates(self._nodeEditInfo, x, y)
+            self._nodeEditInfo.reset()
         elif not self._ignore_mouse_events and self._selection_mode != SelectionMode.NONE:
             x = event.x()
             y = event.y()
@@ -562,7 +697,6 @@ class ZincInteractiveTool():
             top_region = self._sceneviewer.getScene().getRegion()
             top_region.beginHierarchicalChange()
             self._selection_box.setVisibilityFlag(False)
-            
             if (x != self._selection_position_start[0] and y != self._selection_position_start[1]):
                 left = min(x, self._selection_position_start[0])
                 right = max(x, self._selection_position_start[0])
@@ -576,7 +710,6 @@ class ZincInteractiveTool():
                 if self._elemSelectMode:
                     self._scenepicker.addPickedElementsToFieldGroup(self._selectionGroup)
             else:
-
                 self._scenepicker.setSceneviewerRectangle(self._sceneviewer, SCENECOORDINATESYSTEM_LOCAL, x - 3.5, y - 3.5, x + 3.5, y + 3.5)
                 if self._nodeSelectMode and self._elemSelectMode and self._selection_mode == SelectionMode.EXCLUSIVE and not self._scenepicker.getNearestGraphics().isValid():
                     self._selectionGroup.clear()
@@ -584,11 +717,9 @@ class ZincInteractiveTool():
                 if self._nodeSelectMode and (self._scenepicker.getNearestGraphics().getFieldDomainType() == Field.DOMAIN_TYPE_NODES):
                     node = self._scenepicker.getNearestNode()
                     nodeset = node.getNodeset()
-
                     nodegroup = self._selectionGroup.getFieldNodeGroup(nodeset)
                     if not nodegroup.isValid():
                         nodegroup = self._selectionGroup.createFieldNodeGroup(nodeset)
-
                     group = nodegroup.getNodesetGroup()
                     if self._selection_mode == SelectionMode.EXCLUSIVE:
                         remove_current = group.getSize() == 1 and group.containsNode(node)
@@ -600,15 +731,12 @@ class ZincInteractiveTool():
                             group.removeNode(node)
                         else:
                             group.addNode(node)
-
                 if self._elemSelectMode and (self._scenepicker.getNearestGraphics().getFieldDomainType() in [Field.DOMAIN_TYPE_MESH1D, Field.DOMAIN_TYPE_MESH2D, Field.DOMAIN_TYPE_MESH3D, Field.DOMAIN_TYPE_MESH_HIGHEST_DIMENSION]):
                     elem = self._scenepicker.getNearestElement()
                     mesh = elem.getMesh()
-
                     elementgroup = self._selectionGroup.getFieldElementGroup(mesh)
                     if not elementgroup.isValid():
                         elementgroup = self._selectionGroup.createFieldElementGroup(mesh)
-
                     group = elementgroup.getMeshGroup()
                     if self._selection_mode == SelectionMode.EXCLUSIVE:
                         remove_current = group.getSize() == 1 and group.containsElement(elem)
@@ -620,7 +748,6 @@ class ZincInteractiveTool():
                             group.removeElement(elem)
                         else:
                             group.addElement(elem)
-
             top_region.endHierarchicalChange()
             self._selection_mode = SelectionMode.NONE
         elif not self._ignore_mouse_events and self._handle_mouse_events:
@@ -632,6 +759,7 @@ class ZincInteractiveTool():
             self._sceneviewer.processSceneviewerinput(scene_input)
         else:
             event.ignore()
+        self._selection_mode = SelectionMode.NONE
 
     def proceedSceneViewerMouseMoveEvent(self, event):
         '''
@@ -649,12 +777,22 @@ class ZincInteractiveTool():
             if abs(ydiff) < 0.0001:
                 ydiff = 1            
             if self._selection_mode == SelectionMode.EDIT_POSITION:
-                delta = self.getCoordinatesDelta(x, y)
-                self.updateSelectedNodesCoordinatesWithDelta(delta[0], delta[1], delta[2])
+                if self._nodeConstrainMode == True:
+                    returnCode, self._nodeEditInfo._nearestElement, self._nodeEditInfo._elementCoordinateField = \
+                        self.getNearestSurfacesElementAndCoordinates(x, y)
+                    if self._nodeEditInfo._nearestElement and self._nodeEditInfo._elementCoordinateField:
+                        delta = self.getCoordinatesDelta(self._nodeEditInfo, x, y)
+                        self.updateSelectedNodesCoordinatesWithDelta(self._nodeEditInfo, \
+                            self._selectionGroup, delta[0], delta[1], delta[2])                
+                else:
+                    delta = self.getCoordinatesDelta(self._nodeEditInfo, x, y)
+                    self.updateSelectedNodesCoordinatesWithDelta(self._nodeEditInfo, \
+                            self._selectionGroup, delta[0], delta[1], delta[2])
             elif self._selection_mode == SelectionMode.EDIT_VECTOR:
-                if self._selectedOrientationField and self._selectedOrientationField.isValid():
-                    delta = self.getVectorDelta(x, y)
-                    self.updateSelectedNodesVectorWithDelta(delta[0], delta[1], delta[2])
+                if self._nodeEditInfo._orientationField and self._nodeEditInfo._orientationField.isValid():
+                    delta = self.getVectorDelta(self._nodeEditInfo, x, y)
+                    self.updateSelectedNodesVectorWithDelta(self._nodeEditInfo, \
+                            self._selectionGroup, delta[0], delta[1], delta[2])
             else:
                 xoff = float(self._selection_position_start[0]) / xdiff + 0.5
                 yoff = float(self._selection_position_start[1]) / ydiff + 0.5
@@ -664,7 +802,6 @@ class ZincInteractiveTool():
                 self._selectionBox_setGlyphOffset([xoff, -yoff, 0])
                 self._selection_box.setVisibilityFlag(True)
                 scene.endChange()
-
         elif not self._ignore_mouse_events and self._handle_mouse_events:
             scene_input = self._sceneviewer.createSceneviewerinput()
             scene_input.setPosition(event.x(), event.y())

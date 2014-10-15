@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'zincinteractivewidget.ui'
 #
-# Created: Tue Sep 23 15:04:49 2014
+# Created: Tue Oct  7 11:20:02 2014
 #      by: PyQt4 UI code generator 4.10.1
 #
 # WARNING! All changes made in this file will be lost!
@@ -24,23 +24,23 @@ except AttributeError:
         return QtGui.QApplication.translate(context, text, disambig)
 
 class Ui_ZincInteractiveDialog(object):
-    def setupUi(self, zincInteractiveDialog):
-        zincInteractiveDialog.setObjectName(_fromUtf8("zincInteractiveDialog"))
-        zincInteractiveDialog.resize(161, 199)
+    def setupUi(self, ZincInteractiveDialog):
+        ZincInteractiveDialog.setObjectName(_fromUtf8("ZincInteractiveDialog"))
+        ZincInteractiveDialog.resize(225, 186)
         sizePolicy = QtGui.QSizePolicy(QtGui.QSizePolicy.Preferred, QtGui.QSizePolicy.Preferred)
         sizePolicy.setHorizontalStretch(0)
         sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(zincInteractiveDialog.sizePolicy().hasHeightForWidth())
-        zincInteractiveDialog.setSizePolicy(sizePolicy)
-        self.linesSelection = QtGui.QCheckBox(zincInteractiveDialog)
-        self.linesSelection.setGeometry(QtCore.QRect(20, 110, 94, 22))
+        sizePolicy.setHeightForWidth(ZincInteractiveDialog.sizePolicy().hasHeightForWidth())
+        ZincInteractiveDialog.setSizePolicy(sizePolicy)
+        self.linesSelection = QtGui.QCheckBox(ZincInteractiveDialog)
+        self.linesSelection.setGeometry(QtCore.QRect(20, 130, 94, 22))
         self.linesSelection.setObjectName(_fromUtf8("linesSelection"))
-        self.surfacesSelection = QtGui.QCheckBox(zincInteractiveDialog)
-        self.surfacesSelection.setGeometry(QtCore.QRect(20, 140, 94, 22))
+        self.surfacesSelection = QtGui.QCheckBox(ZincInteractiveDialog)
+        self.surfacesSelection.setGeometry(QtCore.QRect(20, 150, 94, 22))
         self.surfacesSelection.setObjectName(_fromUtf8("surfacesSelection"))
-        self.nodeSelectionWidget = QtGui.QWidget(zincInteractiveDialog)
+        self.nodeSelectionWidget = QtGui.QWidget(ZincInteractiveDialog)
         self.nodeSelectionWidget.setEnabled(True)
-        self.nodeSelectionWidget.setGeometry(QtCore.QRect(20, 30, 121, 71))
+        self.nodeSelectionWidget.setGeometry(QtCore.QRect(20, 30, 181, 91))
         self.nodeSelectionWidget.setObjectName(_fromUtf8("nodeSelectionWidget"))
         self.enableSelection = QtGui.QCheckBox(self.nodeSelectionWidget)
         self.enableSelection.setGeometry(QtCore.QRect(10, 0, 94, 22))
@@ -52,24 +52,28 @@ class Ui_ZincInteractiveDialog(object):
         self.enableCreate = QtGui.QCheckBox(self.nodeSelectionWidget)
         self.enableCreate.setGeometry(QtCore.QRect(10, 40, 94, 22))
         self.enableCreate.setObjectName(_fromUtf8("enableCreate"))
-        self.line = QtGui.QFrame(zincInteractiveDialog)
-        self.line.setGeometry(QtCore.QRect(20, 90, 118, 16))
+        self.enableConstrain = QtGui.QCheckBox(self.nodeSelectionWidget)
+        self.enableConstrain.setGeometry(QtCore.QRect(10, 60, 161, 21))
+        self.enableConstrain.setObjectName(_fromUtf8("enableConstrain"))
+        self.line = QtGui.QFrame(ZincInteractiveDialog)
+        self.line.setGeometry(QtCore.QRect(20, 120, 181, 16))
         self.line.setFrameShape(QtGui.QFrame.HLine)
         self.line.setFrameShadow(QtGui.QFrame.Sunken)
         self.line.setObjectName(_fromUtf8("line"))
-        self.nodeLabel = QtGui.QLabel(zincInteractiveDialog)
+        self.nodeLabel = QtGui.QLabel(ZincInteractiveDialog)
         self.nodeLabel.setGeometry(QtCore.QRect(20, 10, 62, 17))
         self.nodeLabel.setObjectName(_fromUtf8("nodeLabel"))
 
-        self.retranslateUi(zincInteractiveDialog)
-        QtCore.QMetaObject.connectSlotsByName(zincInteractiveDialog)
+        self.retranslateUi(ZincInteractiveDialog)
+        QtCore.QMetaObject.connectSlotsByName(ZincInteractiveDialog)
 
-    def retranslateUi(self, zincInteractiveDialog):
-        zincInteractiveDialog.setWindowTitle(_translate("zincInteractiveDialog", "Dialog", None))
-        self.linesSelection.setText(_translate("zincInteractiveDialog", "Lines", None))
-        self.surfacesSelection.setText(_translate("zincInteractiveDialog", "Surfaces", None))
-        self.enableSelection.setText(_translate("zincInteractiveDialog", "Select", None))
-        self.enableEdit.setText(_translate("zincInteractiveDialog", "Edit", None))
-        self.enableCreate.setText(_translate("zincInteractiveDialog", "Create", None))
-        self.nodeLabel.setText(_translate("zincInteractiveDialog", "Nodes", None))
+    def retranslateUi(self, ZincInteractiveDialog):
+        ZincInteractiveDialog.setWindowTitle(_translate("ZincInteractiveDialog", "Dialog", None))
+        self.linesSelection.setText(_translate("ZincInteractiveDialog", "Lines", None))
+        self.surfacesSelection.setText(_translate("ZincInteractiveDialog", "Surfaces", None))
+        self.enableSelection.setText(_translate("ZincInteractiveDialog", "Select", None))
+        self.enableEdit.setText(_translate("ZincInteractiveDialog", "Edit", None))
+        self.enableCreate.setText(_translate("ZincInteractiveDialog", "Create", None))
+        self.enableConstrain.setText(_translate("ZincInteractiveDialog", "Constrain to surfaces", None))
+        self.nodeLabel.setText(_translate("ZincInteractiveDialog", "Nodes", None))
 
